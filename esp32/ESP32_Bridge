@@ -1,16 +1,50 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-const char* ssid = "wifi_name";
-const char* password = "wifi_passowrd";
+const char* ssid = "wifi name";
+const char* password = "wifi_password";
+
+const char* yeelightIP = "yeelight IP";
+const int yeelightPort = yeelight port;
+WiFiClient yeelightClient;
 
 WebServer server(80);
+
 
 float health = 20.0;
 float prevHealth = 20.0;
 int hunger = 20;
 
 #define BUZZER_PIN 13
+
+
+void sendYeelight(String method, String params) {
+  WiFiClient client;
+  if (client.connect(yeelightIP, yeelightPort)) {
+    String cmd = "{\"id\":1,\"method\":\"" + method + "\",\"params\":[" + params + "]}\r\n";
+    client.print(cmd);
+    delay(100);
+    client.stop();
+  } else {
+    Serial.println("Yeelight connection failed");
+  }
+}
+
+void setHealthColor(float h) {
+  if (h > 13) {
+    sendYeelight("set_rgb", "65280,\"smooth\",500");       // green
+  } else if (h > 6) {
+    sendYeelight("set_rgb", "16776960,\"smooth\",500");    // yellow
+  } else {
+    sendYeelight("set_rgb", "16711680,\"smooth\",500");    // red
+  }
+}
+
+void flashDamage(float h) {
+  sendYeelight("set_rgb", "16777215,\"smooth\",0");        // white flash
+  delay(200);
+  setHealthColor(h);                                        // back to health color
+}
 
 void beepDamage() {
   digitalWrite(BUZZER_PIN, HIGH);
@@ -35,15 +69,17 @@ void handleUpdate() {
 
     Serial.printf("Health: %.1f/20  |  Hunger: %d/20\n", health, hunger);
 
-    // Damage detected
     if (health < prevHealth) {
       Serial.println("Damage taken!");
+      flashDamage(health);
       if (health <= 6) {
         Serial.println("Critical health!");
         beepCritical();
       } else {
         beepDamage();
       }
+    } else {
+      setHealthColor(health);
     }
 
     server.send(200, "text/plain", "OK");
